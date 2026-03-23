@@ -1,47 +1,373 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Latest News</title>
 <style>
-body { font-family: Arial; padding: 10px; }
-.item { margin-bottom: 8px; }
-a { text-decoration: none; color: black; }
-a:hover { text-decoration: underline; }
+  :root{
+    --blue:#0076B2;
+    --blue-soft:#F2F8FC;
+    --border:#E6ECF1;
+    --text:#111827;
+    --muted:#5E6B78;
+    --day-bg:#F8FAFC;
+    --red:#D72638;
+    --red-soft:#FFF1F3;
+    --gold:#B7791F;
+    --gold-soft:#FFF8E8;
+    --badge:#EEF5FA;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:transparent;
+    font-family:Arial,sans-serif;
+    color:var(--text);
+  }
+
+  .box{
+    border:1px solid rgba(0,0,0,.10);
+    border-radius:12px;
+    background:#fff;
+    overflow:hidden;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+
+  .header{
+    background:var(--blue);
+    color:#fff;
+    padding:14px 16px;
+    font-size:16px;
+    font-weight:700;
+    letter-spacing:.2px;
+  }
+
+  .content{
+    overflow-y:auto;
+    max-height:100vh;
+    background:#fff;
+  }
+
+  .content::-webkit-scrollbar{ width:7px; }
+  .content::-webkit-scrollbar-thumb{
+    background:#C8D8E4;
+    border-radius:999px;
+  }
+
+  .section-title{
+    font-size:15px;
+    font-weight:700;
+    color:var(--blue);
+    padding:14px 16px 10px 16px;
+    border-top:1px solid var(--border);
+  }
+
+  .top-section{
+    background:var(--blue-soft);
+    border-bottom:1px solid var(--border);
+    padding-bottom:8px;
+  }
+
+  .top-section .section-title{
+    border-top:none;
+    padding-top:16px;
+  }
+
+  .day-section .section-title{
+    background:var(--day-bg);
+    border-bottom:1px solid var(--border);
+  }
+
+  .item{
+    border-top:1px solid var(--border);
+  }
+
+  .top-section .item:first-of-type{
+    border-top:none;
+  }
+
+  .item a{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    text-decoration:none;
+    color:var(--text);
+    padding:12px 16px;
+    font-size:14px;
+    line-height:1.45;
+  }
+
+  .item a:hover{
+    background:#F7FAFD;
+  }
+
+  .rank{
+    flex:0 0 28px;
+    height:28px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:999px;
+    background:#fff;
+    border:1px solid #D7E6F0;
+    color:var(--blue);
+    font-size:13px;
+    font-weight:700;
+    line-height:1;
+    margin-top:1px;
+  }
+
+  .bullet{
+    flex:0 0 auto;
+    color:var(--blue);
+    font-weight:700;
+    font-size:16px;
+    line-height:1;
+    margin-top:2px;
+  }
+
+  .title-wrap{
+    flex:1;
+    min-width:0;
+  }
+
+  .meta{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-bottom:6px;
+  }
+
+  .badge{
+    display:inline-flex;
+    align-items:center;
+    padding:3px 7px;
+    border-radius:999px;
+    font-size:11px;
+    font-weight:700;
+    line-height:1;
+    text-transform:uppercase;
+    border:1px solid transparent;
+  }
+
+  .badge-category{
+    background:var(--badge);
+    color:var(--blue);
+    border-color:#D9E8F3;
+  }
+
+  .badge-breaking{
+    background:var(--red-soft);
+    color:var(--red);
+    border-color:#F4C7CF;
+  }
+
+  .badge-latest{
+    background:var(--gold-soft);
+    color:var(--gold);
+    border-color:#F1DEAE;
+  }
+
+  .empty{
+    padding:16px;
+    color:var(--muted);
+    font-size:14px;
+  }
 </style>
 </head>
 <body>
-
-<div id="news">Loading...</div>
+  <div class="box">
+    <div class="header">Latest News</div>
+    <div class="content" id="content">
+      <div class="empty">Loading latest news…</div>
+    </div>
+  </div>
 
 <script>
-async function loadNews() {
-  try {
-    const res = await fetch("https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml");
-    const text = await res.text();
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(text, "text/xml");
-
-    const items = [...xml.querySelectorAll("item")].slice(0, 10);
-
-    let html = "";
-
-    items.forEach(item => {
-      const title = item.querySelector("title").textContent;
-      const link = item.querySelector("link").textContent;
-
-      html += `<div class="item">• <a href="${link}" target="_blank">${title}</a></div>`;
-    });
-
-    document.getElementById("news").innerHTML = html;
-
-  } catch (e) {
-    document.getElementById("news").innerHTML = "Error loading news";
+(function () {
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
-}
 
-loadNews();
+  function startOfDayUTC(date) {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+
+  function getRecencyLabel(pubDateStr) {
+    var now = new Date();
+    var pub = new Date(pubDateStr);
+    var diffDays = Math.floor((startOfDayUTC(now) - startOfDayUTC(pub)) / 86400000);
+
+    if (diffDays === 0) return "BREAKING";
+    if (diffDays === 1) return "LATEST";
+    return "";
+  }
+
+  function renderMeta(item) {
+    var parts = [];
+    var recency = getRecencyLabel(item.pubDate);
+    var cat = (item.category || "").trim();
+
+    if (recency === "BREAKING") {
+      parts.push('<span class="badge badge-breaking">Breaking</span>');
+    } else if (recency === "LATEST") {
+      parts.push('<span class="badge badge-latest">Latest</span>');
+    }
+
+    if (cat) {
+      parts.push('<span class="badge badge-category">' + esc(cat) + '</span>');
+    }
+
+    return parts.length ? '<div class="meta">' + parts.join("") + '</div>' : "";
+  }
+
+  function pickTop(items) {
+    var maxPerCat = 2;
+    var limit = 10;
+    var used = {};
+    var out = [];
+
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var cat = (item.category || "other").trim().toLowerCase();
+
+      if (!used[cat]) used[cat] = 0;
+
+      if (used[cat] < maxPerCat) {
+        out.push(item);
+        used[cat]++;
+      }
+
+      if (out.length >= limit) break;
+    }
+
+    return out;
+  }
+
+  function removePicked(items, picked) {
+    var seen = {};
+    for (var i = 0; i < picked.length; i++) {
+      seen[picked[i].link + "|" + picked[i].title] = true;
+    }
+    return items.filter(function (item) {
+      return !seen[item.link + "|" + item.title];
+    });
+  }
+
+  function groupByDay(items) {
+    var groups = {};
+    items.forEach(function (item) {
+      var day = new Date(item.pubDate).toLocaleDateString("en-US", {
+        weekday: "long",
+        timeZone: "UTC"
+      });
+      if (!groups[day]) groups[day] = [];
+      groups[day].push(item);
+    });
+    return groups;
+  }
+
+  function orderedDays(groups) {
+    var order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    return order.filter(function (day) {
+      return groups[day] && groups[day].length;
+    });
+  }
+
+  async function load() {
+    try {
+      const res = await fetch("https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml");
+      const text = await res.text();
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "text/xml");
+
+      const items = [...xml.querySelectorAll("item")].slice(0, 50).map(function (item) {
+        const titleNode = item.querySelector("title");
+        const linkNode = item.querySelector("link");
+        const dateNode = item.querySelector("pubDate");
+        const categoryNode = item.querySelector("category");
+
+        return {
+          title: titleNode ? titleNode.textContent.trim() : "",
+          link: linkNode ? linkNode.textContent.trim() : "",
+          category: categoryNode ? categoryNode.textContent.trim() : "",
+          pubDate: dateNode ? new Date(dateNode.textContent.trim()).toISOString() : ""
+        };
+      }).filter(function (item) {
+        return item.title && item.link && item.pubDate;
+      });
+
+      const container = document.getElementById("content");
+
+      if (!items.length) {
+        container.innerHTML = '<div class="empty">No recent updates available.</div>';
+        return;
+      }
+
+      var top = pickTop(items);
+      var rest = removePicked(items, top);
+      var groups = groupByDay(rest);
+      var days = orderedDays(groups);
+
+      var html = "";
+
+      html += '<div class="top-section">';
+      html += '<div class="section-title">Top Updates</div>';
+
+      top.forEach(function (item, index) {
+        html += '<div class="item">';
+        html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
+        html += '<span class="rank">' + (index + 1) + '</span>';
+        html += '<span class="title-wrap">';
+        html += renderMeta(item);
+        html += '<span>' + esc(item.title) + '</span>';
+        html += '</span>';
+        html += '</a>';
+        html += '</div>';
+      });
+
+      html += '</div>';
+
+      days.forEach(function (day) {
+        html += '<div class="day-section">';
+        html += '<div class="section-title">' + day + '</div>';
+
+        groups[day].forEach(function (item) {
+          html += '<div class="item">';
+          html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
+          html += '<span class="bullet">•</span>';
+          html += '<span class="title-wrap">';
+          html += renderMeta(item);
+          html += '<span>' + esc(item.title) + '</span>';
+          html += '</span>';
+          html += '</a>';
+          html += '</div>';
+        });
+
+        html += '</div>';
+      });
+
+      container.innerHTML = html;
+    } catch (err) {
+      document.getElementById("content").innerHTML =
+        '<div class="empty">Unable to load latest news right now.</div>';
+      console.warn(err);
+    }
+  }
+
+  load();
+})();
 </script>
-
 </body>
 </html>
