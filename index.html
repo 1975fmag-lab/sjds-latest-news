@@ -17,7 +17,7 @@ a:hover { text-decoration: underline; }
 <script>
 async function loadNews() {
   try {
-    const res = await fetch("https://www.sanjuandailystar.com/blog-feed.xml");
+    const res = await fetch("https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml");
     const text = await res.text();
     const parser = new DOMParser();
     const xml = parser.parseFromString(text, "text/xml");
