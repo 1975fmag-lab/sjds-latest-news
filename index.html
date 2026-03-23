@@ -191,9 +191,7 @@
 
 <script>
 (function () {
-  const TOP_LIMIT = 10;          // Top Updates: 10 noticias de hoy
-  const PREV_DAY_LIMIT = 6;      // Mostrar solo algunas del día anterior
-  const MAX_PER_CATEGORY_TOP = 2;
+  const TOP_MAX_CATEGORIES = 8;
   const FEED_URL = "https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml";
 
   function esc(str) {
@@ -222,10 +220,16 @@
     return "";
   }
 
+  function normalizeCategory(cat) {
+    return String(cat || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function renderMeta(item) {
     var parts = [];
     var recency = getRecencyLabel(item.pubDate);
-    var cat = (item.category || "").trim();
+    var cat = normalizeCategory(item.category);
 
     if (recency === "BREAKING") {
       parts.push('<span class="badge badge-breaking">Breaking</span>');
@@ -247,56 +251,21 @@
     });
   }
 
-  function getPreviousBusinessDayName() {
-    var now = new Date();
-    var day = now.getUTCDay(); // 0 Sun, 1 Mon, ... 6 Sat
-
-    if (day === 1) return "Friday";
-    if (day === 2) return "Monday";
-    if (day === 3) return "Tuesday";
-    if (day === 4) return "Wednesday";
-    if (day === 5) return "Thursday";
-    if (day === 6) return "Friday";
-    return "Friday";
-  }
-
-  function pickTopToday(todayItems) {
+  function pickTopOnePerCategory(items) {
     var used = {};
     var out = [];
 
-    for (var i = 0; i < todayItems.length; i++) {
-      var item = todayItems[i];
-      var cat = (item.category || "other").trim().toLowerCase();
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var cat = normalizeCategory(item.category) || "Other";
+      var key = cat.toLowerCase();
 
-      if (!used[cat]) used[cat] = 0;
-
-      if (used[cat] < MAX_PER_CATEGORY_TOP) {
+      if (!used[key]) {
+        used[key] = true;
         out.push(item);
-        used[cat]++;
-      } else if (out.length < TOP_LIMIT) {
-        // si una categoría ya llegó al límite, seguimos buscando variedad
-        continue;
       }
 
-      if (out.length >= TOP_LIMIT) break;
-    }
-
-    // si por el límite de categorías no llegamos a 10, completamos con las restantes de hoy
-    if (out.length < TOP_LIMIT) {
-      var seen = {};
-      out.forEach(function(item) {
-        seen[item.link + "|" + item.title] = true;
-      });
-
-      for (var j = 0; j < todayItems.length; j++) {
-        var extra = todayItems[j];
-        var key = extra.link + "|" + extra.title;
-        if (!seen[key]) {
-          out.push(extra);
-          seen[key] = true;
-        }
-        if (out.length >= TOP_LIMIT) break;
-      }
+      if (out.length >= TOP_MAX_CATEGORIES) break;
     }
 
     return out;
@@ -367,19 +336,18 @@
       }
 
       const todayName = getWeekdayNameUTC(new Date().toISOString());
-      const prevBusinessDayName = getPreviousBusinessDayName();
 
       const todayItems = allItems.filter(function(item) {
         return getWeekdayNameUTC(item.pubDate) === todayName;
       });
 
-      const prevDayItems = allItems.filter(function(item) {
-        return getWeekdayNameUTC(item.pubDate) === prevBusinessDayName;
-      });
+      if (!todayItems.length) {
+        container.innerHTML = '<div class="empty">No news published yet today.</div>';
+        return;
+      }
 
-      const topToday = pickTopToday(todayItems);
+      const topToday = pickTopOnePerCategory(todayItems);
       const remainingToday = removePicked(todayItems, topToday);
-      const limitedPrevDay = prevDayItems.slice(0, PREV_DAY_LIMIT);
 
       let html = "";
 
@@ -405,7 +373,6 @@
       html += '</div>';
 
       html += renderSection(todayName, remainingToday, false);
-      html += renderSection(prevBusinessDayName, limitedPrevDay, false);
 
       container.innerHTML = html;
     } catch (err) {
