@@ -19,7 +19,7 @@
     --badge:#EEF5FA;
   }
 
-  *{ box-sizing:border-box; }
+  * { box-sizing:border-box; }
 
   html,body{
     margin:0;
@@ -191,6 +191,11 @@
 
 <script>
 (function () {
+  const TOP_LIMIT = 10;          // Top Updates: 10 noticias de hoy
+  const PREV_DAY_LIMIT = 6;      // Mostrar solo algunas del día anterior
+  const MAX_PER_CATEGORY_TOP = 2;
+  const FEED_URL = "https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml";
+
   function esc(str) {
     return String(str)
       .replace(/&/g, "&amp;")
@@ -204,11 +209,14 @@
     return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
   }
 
-  function getRecencyLabel(pubDateStr) {
+  function getDiffDaysFromToday(pubDateStr) {
     var now = new Date();
     var pub = new Date(pubDateStr);
-    var diffDays = Math.floor((startOfDayUTC(now) - startOfDayUTC(pub)) / 86400000);
+    return Math.floor((startOfDayUTC(now) - startOfDayUTC(pub)) / 86400000);
+  }
 
+  function getRecencyLabel(pubDateStr) {
+    var diffDays = getDiffDaysFromToday(pubDateStr);
     if (diffDays === 0) return "BREAKING";
     if (diffDays === 1) return "LATEST";
     return "";
@@ -232,24 +240,63 @@
     return parts.length ? '<div class="meta">' + parts.join("") + '</div>' : "";
   }
 
-  function pickTop(items) {
-    var maxPerCat = 2;
-    var limit = 10;
+  function getWeekdayNameUTC(dateStr) {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "UTC"
+    });
+  }
+
+  function getPreviousBusinessDayName() {
+    var now = new Date();
+    var day = now.getUTCDay(); // 0 Sun, 1 Mon, ... 6 Sat
+
+    if (day === 1) return "Friday";
+    if (day === 2) return "Monday";
+    if (day === 3) return "Tuesday";
+    if (day === 4) return "Wednesday";
+    if (day === 5) return "Thursday";
+    if (day === 6) return "Friday";
+    return "Friday";
+  }
+
+  function pickTopToday(todayItems) {
     var used = {};
     var out = [];
 
-    for (var i = 0; i < items.length; i++) {
-      var item = items[i];
+    for (var i = 0; i < todayItems.length; i++) {
+      var item = todayItems[i];
       var cat = (item.category || "other").trim().toLowerCase();
 
       if (!used[cat]) used[cat] = 0;
 
-      if (used[cat] < maxPerCat) {
+      if (used[cat] < MAX_PER_CATEGORY_TOP) {
         out.push(item);
         used[cat]++;
+      } else if (out.length < TOP_LIMIT) {
+        // si una categoría ya llegó al límite, seguimos buscando variedad
+        continue;
       }
 
-      if (out.length >= limit) break;
+      if (out.length >= TOP_LIMIT) break;
+    }
+
+    // si por el límite de categorías no llegamos a 10, completamos con las restantes de hoy
+    if (out.length < TOP_LIMIT) {
+      var seen = {};
+      out.forEach(function(item) {
+        seen[item.link + "|" + item.title] = true;
+      });
+
+      for (var j = 0; j < todayItems.length; j++) {
+        var extra = todayItems[j];
+        var key = extra.link + "|" + extra.title;
+        if (!seen[key]) {
+          out.push(extra);
+          seen[key] = true;
+        }
+        if (out.length >= TOP_LIMIT) break;
+      }
     }
 
     return out;
@@ -257,42 +304,46 @@
 
   function removePicked(items, picked) {
     var seen = {};
-    for (var i = 0; i < picked.length; i++) {
-      seen[picked[i].link + "|" + picked[i].title] = true;
-    }
-    return items.filter(function (item) {
+    picked.forEach(function(item) {
+      seen[item.link + "|" + item.title] = true;
+    });
+    return items.filter(function(item) {
       return !seen[item.link + "|" + item.title];
     });
   }
 
-  function groupByDay(items) {
-    var groups = {};
-    items.forEach(function (item) {
-      var day = new Date(item.pubDate).toLocaleDateString("en-US", {
-        weekday: "long",
-        timeZone: "UTC"
-      });
-      if (!groups[day]) groups[day] = [];
-      groups[day].push(item);
-    });
-    return groups;
-  }
+  function renderSection(title, items, numbered) {
+    if (!items.length) return "";
 
-  function orderedDays(groups) {
-    var order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    return order.filter(function (day) {
-      return groups[day] && groups[day].length;
+    var html = '<div class="day-section">';
+    html += '<div class="section-title">' + esc(title) + '</div>';
+
+    items.forEach(function(item, index) {
+      html += '<div class="item">';
+      html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
+      html += numbered
+        ? '<span class="rank">' + (index + 1) + '</span>'
+        : '<span class="bullet">•</span>';
+      html += '<span class="title-wrap">';
+      html += renderMeta(item);
+      html += '<span>' + esc(item.title) + '</span>';
+      html += '</span>';
+      html += '</a>';
+      html += '</div>';
     });
+
+    html += '</div>';
+    return html;
   }
 
   async function load() {
     try {
-      const res = await fetch("https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml");
+      const res = await fetch(FEED_URL);
       const text = await res.text();
       const parser = new DOMParser();
       const xml = parser.parseFromString(text, "text/xml");
 
-      const items = [...xml.querySelectorAll("item")].slice(0, 50).map(function (item) {
+      const allItems = [...xml.querySelectorAll("item")].map(function(item) {
         const titleNode = item.querySelector("title");
         const linkNode = item.querySelector("link");
         const dateNode = item.querySelector("pubDate");
@@ -304,49 +355,42 @@
           category: categoryNode ? categoryNode.textContent.trim() : "",
           pubDate: dateNode ? new Date(dateNode.textContent.trim()).toISOString() : ""
         };
-      }).filter(function (item) {
+      }).filter(function(item) {
         return item.title && item.link && item.pubDate;
       });
 
       const container = document.getElementById("content");
 
-      if (!items.length) {
+      if (!allItems.length) {
         container.innerHTML = '<div class="empty">No recent updates available.</div>';
         return;
       }
 
-      var top = pickTop(items);
-      var rest = removePicked(items, top);
-      var groups = groupByDay(rest);
-      var days = orderedDays(groups);
+      const todayName = getWeekdayNameUTC(new Date().toISOString());
+      const prevBusinessDayName = getPreviousBusinessDayName();
 
-      var html = "";
+      const todayItems = allItems.filter(function(item) {
+        return getWeekdayNameUTC(item.pubDate) === todayName;
+      });
+
+      const prevDayItems = allItems.filter(function(item) {
+        return getWeekdayNameUTC(item.pubDate) === prevBusinessDayName;
+      });
+
+      const topToday = pickTopToday(todayItems);
+      const remainingToday = removePicked(todayItems, topToday);
+      const limitedPrevDay = prevDayItems.slice(0, PREV_DAY_LIMIT);
+
+      let html = "";
 
       html += '<div class="top-section">';
       html += '<div class="section-title">Top Updates</div>';
 
-      top.forEach(function (item, index) {
-        html += '<div class="item">';
-        html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
-        html += '<span class="rank">' + (index + 1) + '</span>';
-        html += '<span class="title-wrap">';
-        html += renderMeta(item);
-        html += '<span>' + esc(item.title) + '</span>';
-        html += '</span>';
-        html += '</a>';
-        html += '</div>';
-      });
-
-      html += '</div>';
-
-      days.forEach(function (day) {
-        html += '<div class="day-section">';
-        html += '<div class="section-title">' + day + '</div>';
-
-        groups[day].forEach(function (item) {
+      if (topToday.length) {
+        topToday.forEach(function(item, index) {
           html += '<div class="item">';
           html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
-          html += '<span class="bullet">•</span>';
+          html += '<span class="rank">' + (index + 1) + '</span>';
           html += '<span class="title-wrap">';
           html += renderMeta(item);
           html += '<span>' + esc(item.title) + '</span>';
@@ -354,9 +398,14 @@
           html += '</a>';
           html += '</div>';
         });
+      } else {
+        html += '<div class="empty">No Top Updates available yet today.</div>';
+      }
 
-        html += '</div>';
-      });
+      html += '</div>';
+
+      html += renderSection(todayName, remainingToday, false);
+      html += renderSection(prevBusinessDayName, limitedPrevDay, false);
 
       container.innerHTML = html;
     } catch (err) {
