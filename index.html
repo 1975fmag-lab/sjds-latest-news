@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Latest News</title>
+<style>
+body { font-family: Arial; padding: 10px; }
+.item { margin-bottom: 8px; }
+a { text-decoration: none; color: black; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="news">Loading...</div>
+
+<script>
+async function loadNews() {
+  try {
+    const res = await fetch("https://www.sanjuandailystar.com/blog-feed.xml");
+    const text = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "text/xml");
+
+    const items = [...xml.querySelectorAll("item")].slice(0, 10);
+
+    let html = "";
+
+    items.forEach(item => {
+      const title = item.querySelector("title").textContent;
+      const link = item.querySelector("link").textContent;
+
+      html += `<div class="item">• <a href="${link}" target="_blank">${title}</a></div>`;
+    });
+
+    document.getElementById("news").innerHTML = html;
+
+  } catch (e) {
+    document.getElementById("news").innerHTML = "Error loading news";
+  }
+}
+
+loadNews();
+</script>
+
+</body>
+</html>
