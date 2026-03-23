@@ -11,7 +11,6 @@
     --border:#E6ECF1;
     --text:#111827;
     --muted:#5E6B78;
-    --day-bg:#F8FAFC;
     --red:#D72638;
     --red-soft:#FFF1F3;
     --gold:#B7791F;
@@ -65,23 +64,11 @@
     font-weight:700;
     color:var(--blue);
     padding:14px 16px 10px 16px;
-    border-top:1px solid var(--border);
   }
 
   .top-section{
     background:var(--blue-soft);
-    border-bottom:1px solid var(--border);
     padding-bottom:8px;
-  }
-
-  .top-section .section-title{
-    border-top:none;
-    padding-top:16px;
-  }
-
-  .day-section .section-title{
-    background:var(--day-bg);
-    border-bottom:1px solid var(--border);
   }
 
   .item{
@@ -121,15 +108,6 @@
     font-weight:700;
     line-height:1;
     margin-top:1px;
-  }
-
-  .bullet{
-    flex:0 0 auto;
-    color:var(--blue);
-    font-weight:700;
-    font-size:16px;
-    line-height:1;
-    margin-top:2px;
   }
 
   .title-wrap{
@@ -191,7 +169,7 @@
 
 <script>
 (function () {
-  const TOP_MAX_CATEGORIES = 8;
+  const TOP_LIMIT = 12;
   const FEED_URL = "https://api.allorigins.win/raw?url=https://www.sanjuandailystar.com/blog-feed.xml";
 
   function esc(str) {
@@ -226,6 +204,11 @@
       .trim();
   }
 
+  function isLocalCategory(cat) {
+    var c = normalizeCategory(cat).toLowerCase();
+    return c === "local" || c === "locales";
+  }
+
   function renderMeta(item) {
     var parts = [];
     var recency = getRecencyLabel(item.pubDate);
@@ -251,58 +234,36 @@
     });
   }
 
-  function pickTopOnePerCategory(items) {
-    var used = {};
+  function pickTopOnePerCategoryWithLocalFirst(items) {
     var out = [];
+    var used = {};
 
+    // 1) Forzar Local si existe
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
-      var cat = normalizeCategory(item.category) || "Other";
-      var key = cat.toLowerCase();
+      var cat = normalizeCategory(item.category);
+      if (isLocalCategory(cat)) {
+        out.push(item);
+        used[cat.toLowerCase()] = true;
+        break;
+      }
+    }
+
+    // 2) Completar con una por categoría
+    for (var j = 0; j < items.length; j++) {
+      var current = items[j];
+      var currentCat = normalizeCategory(current.category) || "Other";
+      var key = currentCat.toLowerCase();
 
       if (!used[key]) {
+        out.push(current);
         used[key] = true;
-        out.push(item);
       }
 
-      if (out.length >= TOP_MAX_CATEGORIES) break;
+      if (out.length >= TOP_LIMIT) break;
     }
 
     return out;
-  }
-
-  function removePicked(items, picked) {
-    var seen = {};
-    picked.forEach(function(item) {
-      seen[item.link + "|" + item.title] = true;
-    });
-    return items.filter(function(item) {
-      return !seen[item.link + "|" + item.title];
-    });
-  }
-
-  function renderSection(title, items, numbered) {
-    if (!items.length) return "";
-
-    var html = '<div class="day-section">';
-    html += '<div class="section-title">' + esc(title) + '</div>';
-
-    items.forEach(function(item, index) {
-      html += '<div class="item">';
-      html += '<a href="' + esc(item.link) + '" target="_blank" rel="noopener">';
-      html += numbered
-        ? '<span class="rank">' + (index + 1) + '</span>'
-        : '<span class="bullet">•</span>';
-      html += '<span class="title-wrap">';
-      html += renderMeta(item);
-      html += '<span>' + esc(item.title) + '</span>';
-      html += '</span>';
-      html += '</a>';
-      html += '</div>';
-    });
-
-    html += '</div>';
-    return html;
   }
 
   async function load() {
@@ -346,11 +307,9 @@
         return;
       }
 
-      const topToday = pickTopOnePerCategory(todayItems);
-      const remainingToday = removePicked(todayItems, topToday);
+      const topToday = pickTopOnePerCategoryWithLocalFirst(todayItems);
 
       let html = "";
-
       html += '<div class="top-section">';
       html += '<div class="section-title">Top Updates</div>';
 
@@ -371,10 +330,8 @@
       }
 
       html += '</div>';
-
-      html += renderSection(todayName, remainingToday, false);
-
       container.innerHTML = html;
+
     } catch (err) {
       document.getElementById("content").innerHTML =
         '<div class="empty">Unable to load latest news right now.</div>';
